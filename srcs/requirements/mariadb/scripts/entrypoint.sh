@@ -1,19 +1,49 @@
-cat .setup 2> /dev/null
-if [ $? -ne 0 ]; then
-	# https://dev.mysql.com/doc/refman/8.0/en/mysqld-safe.html
-	# Le & va etre utilise pour effectuer une "modification sur le serveur MySQL" - mysql driver avec des options
-	usr/bin/mysqld_safe --datadir=/var/lib/mysql &
+#!/bin/sh
 
-	# Il est necessaire d'attendre que la base de donnee soit bien accessible, mysql lance
-	while ! mysqladmin ping -h "$MARIADB_HOST" --silent; do
-    	sleep 1
-	done
-
-	eval "echo \"$(cat /tmp/create_db.sql)\"" | mariadb
-	touch .setup
+if [ ! -d "/run/mysqld" ]; then
+	mkdir -p /run/mysqld
+	chown -R mysql:mysql /run/mysqld
 fi
-# Lancement du serveur mysql de facon la plus securisee sur Uinix
-usr/bin/mysqld_safe --datadir=/var/lib/mysql
+
+if [ ! -d "/var/lib/mysql/mysql" ]; then
+	
+	chown -R mysql:mysql /var/lib/mysql
+
+	# init database
+	mysql_install_db --basedir=/usr --datadir=/var/lib/mysql --user=mysql --rpm > /dev/null
+
+	tfile=`mktemp`
+	if [ ! -f "$tfile" ]; then
+		return 1
+	fi
+
+	# https://stackoverflow.com/questions/10299148/mysql-error-1045-28000-access-denied-for-user-billlocalhost-using-passw
+	cat << EOF > $tfile
+USE mysql;
+FLUSH PRIVILEGES;
+
+DELETE FROM	mysql.user WHERE User='';
+DROP DATABASE test;
+DELETE FROM mysql.db WHERE Db='test';
+DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+
+ALTER USER 'root'@'localhost' IDENTIFIED BY '$MARIADB_ROOT_PW';
+
+CREATE DATABASE $MARIADB_DB CHARACTER SET utf8 COLLATE utf8_general_ci;
+CREATE USER '$MARIADB_USER'@'%' IDENTIFIED by '$MARIADB_PWD';
+GRANT ALL PRIVILEGES ON $MARIADB_HOST.* TO '$MARIADB_USER'@'%';
+
+FLUSH PRIVILEGES;
+EOF
+	/usr/bin/mysqld --user=mysql --bootstrap < $tfile
+	rm -f $tfile
+fi
+
+# allow remote connections
+sed -i "s|skip-networking|# skip-networking|g" /etc/my.cnf.d/mariadb-server.cnf
+sed -i "s|.*bind-address\s*=.*|bind-address=0.0.0.0|g" /etc/my.cnf.d/mariadb-server.cnf
+
+exec /usr/bin/mysqld --user=mysql --console
 
 # Une fois dans le container, on pourra
 # mysql -u root -p (puis rentrer root_pwd)

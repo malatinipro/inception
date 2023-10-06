@@ -1,65 +1,32 @@
 version: '3'
-# Le fichier docker-compose va permettre de definir les services, les volumes et les networks
 
-# docker volume ls
-volumes:
-  mariadb-volume:
-    driver: local
-    driver_opts:
-      device: /home/malatini/data/database
-      type: volume
-      o: bind
-  wordpress-volume:
-    driver: local
-    driver_opts:
-      device: /home/malatini/data/wordpress
-      type: volume
-      o: bind
-
-# docker network ls 
 networks:
   inception-network:
 
 services:
   nginx:
+    build: ./requirements/nginx
     container_name: nginx
-    build:
-      context: ./requirements/nginx
-    image: img_nginx
-    volumes:
-      - wordpress-volume:/var/www/wordpress
-    networks:
-      - inception-network
+    #image: img_nginx
     ports:
       - "443:443"
-    restart: unless-stopped
-
-  mariadb:
-    container_name: mariadb
-    build:
-      context: ./requirements/mariadb
-    image: img_mariadb
+      - "80:80"
     volumes:
-      - mariadb-volume:/var/lib/mysql
+      - "~/Desktop/inception/website:/var/www/html"
     networks:
       - inception-network
-    #Variable interpolation
-    environment:
-      - MARIADB_ROOT_PWD=${MARIADB_ROOT_PWD}
-      - MARIADB_DB=${MARIADB_DB}
-      - MARIADB_USER=${MARIADB_USER}
-      - MARIADB_PWD=${MARIADB_PWD}
-    restart: unless-stopped
+    restart: always
 
   wordpress:
+    build: ./requirements/wordpress
     container_name: wordpress
+    ports:
+      - "9000:9000"
     depends_on:
       - mariadb
-    build:
-      context: ./requirements/wordpress
-    image: img_wordpress
+    # image: img_wordpress
     volumes:
-      - wordpress-volume:/var/www/wordpress
+      - "~/Desktop/inception/website:/var/www/html"
     networks:
       - inception-network
     environment: 
@@ -76,4 +43,35 @@ services:
       - MARIADB_USER=${MARIADB_USER}
       - MARIADB_PWD=${MARIADB_PWD}
       - MARIADB_DB=${MARIADB_DB}
-    restart: unless-stopped
+    restart: always
+
+  mariadb:
+    container_name: mariadb
+    build: ./requirements/mariadb
+    # image: img_mariadb
+    ports:
+      - "3306:3306"
+    volumes:
+      - "~/Desktop/inception/mariadb:/var/lib/mysql"
+    networks:
+      - inception-network
+    environment:
+      - MARIADB_ROOT_PWD=${MARIADB_ROOT_PWD}
+      - MARIADB_DB=${MARIADB_DB}
+      - MARIADB_USER=${MARIADB_USER}
+      - MARIADB_PWD=${MARIADB_PWD}
+    restart: always
+
+# volumes:
+#   mariadb-volume:
+#     driver: local
+#     driver_opts:
+#       device: /home/malatini/data/database
+#       type: volume
+#       o: bind
+#   wordpress-volume:
+#     driver: local
+#     driver_opts:
+#       device: /home/malatini/data/wordpress
+#       type: volume
+#       o: bind
